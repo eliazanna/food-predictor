@@ -7,6 +7,7 @@ import uuid
 import csv
 from datetime import datetime
 import os
+import pandas as pd
 
 st.set_page_config(page_title="Food Classifier", layout="centered")
 
@@ -20,12 +21,16 @@ def get_or_create_user_id():
 def log_user_image(user_id, filename, prediction, log_path='user_tracking.csv'):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     file_exists = os.path.exists(log_path)
-
     with open(log_path, mode='a', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         if not file_exists:
             writer.writerow(['user_id', 'filename', 'prediction', 'timestamp'])
         writer.writerow([user_id, filename, prediction, now])
+
+@st.cache_data
+def load_calorie_data():
+    df = pd.read_csv("calorie.csv", header=None, names=["food", "calories"])
+    return df
 
 # ----------------- Modello -----------------
 
@@ -56,6 +61,8 @@ transform = transforms.Compose([
 ])
 
 model = load_model()
+calorie_df = load_calorie_data()
+class_names = ['apple_pie', 'cannoli', 'edamame', 'falafel', 'ramen', 'sushi', 'tiramisù']
 
 # ----------------- UI Streamlit -----------------
 
@@ -63,7 +70,6 @@ st.title("🍽️ Calorie Predictor")
 st.caption("Scatta o carica una foto del tuo piatto per scoprire cosa stai mangiando!")
 
 uploaded_file = st.file_uploader("Carica un'immagine", type=["jpg", "png", "jpeg"])
-class_names = ['apple_pie', 'cannoli', 'edamame', 'falafel', 'ramen', 'sushi', 'tiramisù']
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
@@ -77,6 +83,14 @@ if uploaded_file:
 
     st.success(f"🍝 Questo cibo sembra: **{predicted_label.upper()}**")
 
-    # Tracking dell'utente
+    # Tracking utente
     user_id = get_or_create_user_id()
     log_user_image(user_id, uploaded_file.name, predicted_label)
+
+    # Calorie da CSV
+    match = calorie_df[calorie_df["food"] == predicted_label]
+    if not match.empty:
+        calorie = match["calories"].values[0]
+        st.info(f"🔥 **{predicted_label.upper()}** contiene circa **{calorie} kcal**")
+    else:
+        st.warning("⚠️ Non abbiamo trovato le calorie per questo cibo.")
